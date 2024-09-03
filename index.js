@@ -1,8 +1,8 @@
-const PORT = process.env.PORT || 8000
-const express = require('express')
-const axios = require('axios')
-const cheerio = require('cheerio')
-const app = express()
+const PORT = process.env.PORT || 8000;
+const express = require('express');
+const axios = require('axios');
+const cheerio = require('cheerio');
+const app = express();
 
 const newspapers = [
     {
@@ -70,62 +70,81 @@ const newspapers = [
         address: 'https://nypost.com/tag/climate-change/',
         base: ''
     }
-]
+];
 
-const articles = []
+const articles = [];
 
 newspapers.forEach(newspaper => {
-    axios.get(newspaper.address)
-        .then(response => {
-            const html = response.data
-            const $ = cheerio.load(html)
+    axios.get(newspaper.address, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+    })
+    .then(response => {
+        const html = response.data;
+        const $ = cheerio.load(html);
 
-            $('a:contains("climate")', html).each(function () {
-                const title = $(this).text()
-                const url = $(this).attr('href')
+        $('a:contains("climate")', html).each(function () {
+            const title = $(this).text();
+            const url = $(this).attr('href');
 
-                articles.push({
-                    title,
-                    url: newspaper.base + url,
-                    source: newspaper.name
-                })
-            })
-
-        })
-})
+            articles.push({
+                title,
+                url: newspaper.base + url,
+                source: newspaper.name
+            });
+        });
+    })
+    .catch(error => {
+        if (error.isAxiosError) {
+            console.error(`Error fetching data from ${newspaper.name}:`, error.message);
+        } else {
+            console.error('Unexpected error:', error);
+        }
+    });
+});
 
 app.get('/', (req, res) => {
-    res.json('Welcome to my Climate Change News API')
-})
+    res.json('Welcome to my Climate Change News API');
+});
 
 app.get('/news', (req, res) => {
-    res.json(articles)
-})
+    res.json(articles);
+});
 
 app.get('/news/:newspaperId', (req, res) => {
-    const newspaperId = req.params.newspaperId
+    const newspaperId = req.params.newspaperId;
 
-    const newspaperAddress = newspapers.filter(newspaper => newspaper.name == newspaperId)[0].address
-    const newspaperBase = newspapers.filter(newspaper => newspaper.name == newspaperId)[0].base
+    const newspaper = newspapers.find(newspaper => newspaper.name === newspaperId);
+    if (!newspaper) {
+        return res.status(404).json({ error: 'Newspaper not found' });
+    }
 
+    axios.get(newspaper.address, {
+        headers: {
+            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3'
+        }
+    })
+    .then(response => {
+        const html = response.data;
+        const $ = cheerio.load(html);
+        const specificArticles = [];
 
-    axios.get(newspaperAddress)
-        .then(response => {
-            const html = response.data
-            const $ = cheerio.load(html)
-            const specificArticles = []
+        $('a:contains("climate")', html).each(function () {
+            const title = $(this).text();
+            const url = $(this).attr('href');
+            specificArticles.push({
+                title,
+                url: newspaper.base + url,
+                source: newspaperId
+            });
+        });
+        res.json(specificArticles);
+    })
+    .catch(err => {
+        console.error(`Error fetching data from ${newspaperId}:`, err.message);
+        res.status(500).json({ error: 'Failed to fetch data' });
+    });
+});
 
-            $('a:contains("climate")', html).each(function () {
-                const title = $(this).text()
-                const url = $(this).attr('href')
-                specificArticles.push({
-                    title,
-                    url: newspaperBase + url,
-                    source: newspaperId
-                })
-            })
-            res.json(specificArticles)
-        }).catch(err => console.log(err))
-})
-
-app.listen(PORT, () => console.log(`server running on PORT ${PORT}`))
+app.listen(PORT, () => console.log(`server running on PORT ${PORT}`));
